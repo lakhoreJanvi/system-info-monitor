@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Process Monitor</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background: #f6f7f9; }
+    header { background:#111827; color:#fff; padding:16px 20px; }
+    .container { max-width: 1100px; margin: 20px auto; padding: 0 16px; }
+    .card { background:#fff; border-radius:16px; box-shadow: 0 6px 24px rgba(0,0,0,.08); padding:16px; }
+    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    select, button { padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; background:#fff; cursor:pointer; }
+    button { border-color:#111827; }
+    .muted { color:#6b7280; }
+    ul.tree { list-style:none; padding-left: 16px; }
+    .node { margin:4px 0; background:#f9fafb; border:1px solid #e5e7eb; padding:8px 10px; border-radius:10px; }
+    .toggle { font-weight:700; cursor:pointer; margin-right:8px; }
+    .meta { font-size:12px; color:#6b7280; margin-left:6px; }
+    .hidden { display:none; }
+    .stat { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <header>
+    <h2>Process Monitor</h2>
+  </header>
+
+  <div class="container">
+    <div class="card">
+      <div class="row">
+        <label for="hostSel">Hostname</label>
+        <select id="hostSel"></select>
+        <button id="refreshBtn">Refresh</button>
+        <span id="stamp" class="muted"></span>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h3>System Details</h3>
+      <ul id="sysDetails"></ul>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h3>Process Tree</h3>
+      <div id="treeWrap"></div>
+    </div>
+  </div>
+
+  <script>
+    const hostSel = document.getElementById('hostSel');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const stamp = document.getElementById('stamp');
+    const treeWrap = document.getElementById('treeWrap');
+
+    async function fetchJSON(url) {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
+
+    function makeNode(proc) {
+      const li = document.createElement('li');
+      li.className = 'node';
+      const hasChildren = (proc.children || []).length > 0;
+
+      const toggle = document.createElement('span');
+      toggle.className = 'toggle';
+      toggle.textContent = hasChildren ? '▾' : '•';
+
+      const title = document.createElement('span');
+      title.textContent = `${proc.name} (${proc.pid})`;
+
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.innerHTML = `<span class="stat">CPU ${proc.cpu_percent.toFixed(1)}%</span> · <span class="stat">MEM ${proc.memory_percent.toFixed(1)}%</span>`;
+
+      const childrenUl = document.createElement('ul');
+      childrenUl.className = 'tree';
+      (proc.children || []).forEach(ch => childrenUl.appendChild(makeNode(ch)));
+
+      if (hasChildren) {
+        toggle.addEventListener('click', () => {
+          const hidden = childrenUl.classList.toggle('hidden');
+          toggle.textContent = hidden ? '▸' : '▾';
+        });
+      }
+
+      li.append(toggle, title, meta);
+      if (hasChildren) li.appendChild(childrenUl);
+      return li;
+    }
+
+    function renderTree(tree) {
+      const ul = document.createElement('ul');
+      ul.className = 'tree';
+      tree.forEach(p => ul.appendChild(makeNode(p)));
+      treeWrap.innerHTML = '';
+      treeWrap.appendChild(ul);
+    }
+
+    async function loadHosts() {
+      const data = await fetchJSON('/api/v1/hosts/');
+      hostSel.innerHTML = '';
+      data.hosts.forEach(h => {
+        const opt = document.createElement('option');
+        opt.value = h; opt.textContent = h;
+        hostSel.appendChild(opt);
+      });
+    }
+
+    function renderSystemInfo(info) {
+      const ul = document.getElementById("sysDetails");
+      ul.innerHTML = `
+        <li><b>System Name:</b> ${info.system_name || "N/A"}</li>
+        <li><b>OS:</b> ${info.os}</li>
+        <li><b>Processor:</b> ${info.processor}</li>
+        <li><b>Cores:</b> ${info.cores}</li>
+        <li><b>Threads:</b> ${info.threads}</li>
+        <li><b>Total RAM:</b> ${info.ram_total} GB</li>
+        <li><b>Used RAM:</b> ${info.ram_used} GB</li>
+        <li><b>Available RAM:</b> ${info.ram_available} GB</li>
+        <li><b>Total Storage:</b> ${info.storage_total ?? "N/A"} GB</li>
+        <li><b>Used Storage:</b> ${info.storage_used ?? "N/A"} GB</li>
+        <li><b>Free Storage:</b> ${info.storage_free ?? "N/A"} GB</li>
+      `;
+    }
+  
+    async function loadLatest() {
+      const h = hostSel.value;
+      if (!h) return;
+      const data = await fetchJSON(`/api/v1/snapshots/latest/?hostname=${encodeURIComponent(h)}`);
+      stamp.textContent = `Host: ${data.hostname} · Collected: ${new Date(data.collected_at).toLocaleString()}`;
+      renderSystemInfo(data.system_info);
+      renderTree(data.process_tree);
+    }
+
+    refreshBtn.addEventListener('click', loadLatest);
+    hostSel.addEventListener('change', loadLatest);
+
+    (async function init() {
+      await loadHosts();
+      if (hostSel.options.length) hostSel.selectedIndex = 0;
+      await loadLatest();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+# Python
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+*.db
+
+# Django
+*.sqlite3
+db.sqlite3
+/media
+/staticfiles
+
+# Environments
+venv/
+.env
+*.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Agent config
+system_info-agent/config.json

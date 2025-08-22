@@ -1,0 +1,3 @@
+([('agent',
+   '/Users/janvi/Documents/system-info/system_info-agent/dist/agent',
+   'EXECUTABLE')],)
